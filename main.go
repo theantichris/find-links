@@ -3,21 +3,45 @@ package main
 
 import (
 	"fmt"
-	"os"
-
 	"golang.org/x/net/html"
+	"net/http"
+	"os"
 )
 
 func main() {
-	doc, err := html.Parse(os.Stdin)
+	for _, url := range os.Args[1:] {
+		links, err := findLinks(url)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "findlinks: %v\n", err)
+			continue
+		}
+
+		for _, link := range links {
+			fmt.Println(link)
+		}
+	}
+}
+
+// findLinks performs an HTTP Get request for url, parses the
+// response as HTML, and extracts and returns the links.
+func findLinks(url string) ([]string, error) {
+	resp, err := http.Get(url)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "findlinks: %v\n", err)
-		os.Exit(1)
+		return nil, err
 	}
 
-	for _, link := range visit(nil, doc) {
-		fmt.Println(link)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("getting %s: %s", url, resp.Status)
 	}
+
+	doc, err := html.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s as HTML: %v", url, err)
+	}
+
+	return visit(nil, doc), nil
 }
 
 // visit appends to links each link found in n and returns the result.
